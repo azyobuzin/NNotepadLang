@@ -19,10 +19,12 @@ namespace NNotepadLang.Cmd
         {
             //var exprs = YacqServices.ReadAll(new Reader(NlGrammar.Default), File.ReadAllText(@"C:\Users\azyobuzin\Desktop\test.np"));
             //Debugger.Break();
+
             var g = NlGrammar.Default.Get;
 
-            var test = g["name", "class"];
-            var ret = test("test::a".AsStream());
+            var test = g["root", "expr"];
+            var a = @"a++(""s"")[bf][aaa](("""" else """" in nil))[12(""*3"")]";
+            var ret = test(@"a++(""s"")".AsStream());
 
             Console.Write(ret.Status);
             Console.ReadKey();

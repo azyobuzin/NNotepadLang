@@ -102,13 +102,11 @@ namespace NNotepadLang
                 (x, y) => YacqExpression.Identifier(x + string.Concat(y))
             ));
 
-            this.Add("term", "string", g => '"'.Satisfy().SelectMany(q =>
-                q.Satisfy().Not()
-                    .Right('\\'.Satisfy().Right(q.Satisfy()).Or(Chars.Any()))
-                    .Many()
-                    .Left(q.Satisfy())
-                    .Select(t => YacqExpression.Text(q, string.Concat(t)))
-            ));
+            this.Add("term", "string", g => Chars.NoneOf('\\', '"')
+                .Or('\\'.Satisfy().Right(Chars.Any()))
+                .Many().Between('"'.Satisfy(), '"'.Satisfy())
+                .Select(c => YacqExpression.Text('"', string.Concat(c)))
+            );
 
             this.Add("deco", "access", g =>
                 Combinator.Choice(
@@ -195,34 +193,37 @@ namespace NNotepadLang
                     .Pipe(g["expr", "unary"], (x, y) => YacqExpression.List(x, y) as YacqExpression)
             ));
 
-            this.Add("expr", "post", g => g["root", "factor"].Pipe(
-                Combinator.Choice(
-                    g["list", "args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"])
-                        .Select(expr => Tuple.Create(0, expr.Otherwise(() => new NlListExpression()), YacqExpression.Ignore() as YacqExpression)),
-                    g["root", "expr"].Between(g["root", "lbracket"], g["root", "rbracket"])
-                        .Select(expr => Tuple.Create(1, expr, YacqExpression.Ignore() as YacqExpression)),
-                    g["symbol", "member"].Pipe(g["term", "identifier"],
-                        (x, y) => Tuple.Create(2, x, y)),
-                    g["symbol", "increment"].Or(g["symbol", "decrement"])
-                        .Select(x => Tuple.Create(3, x, YacqExpression.Ignore() as YacqExpression))
-                ).Many(),
-                (factor, list) => list.Aggregate(factor, (p, t) =>
-                {
-                    switch (t.Item1)
+            this.Add("expr", "post", g => g["root", "factor"]
+                .Pipe(
+                    Combinator.Choice(
+                        g["list", "args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"])
+                            .Select(expr => Tuple.Create(0, expr.Otherwise(() => new NlListExpression()), YacqExpression.Ignore() as YacqExpression)),
+                        g["root", "expr"].Between(g["root", "lbracket"], g["root", "rbracket"])
+                            .Select(expr => Tuple.Create(1, expr, YacqExpression.Ignore() as YacqExpression)),
+                        g["symbol", "member"].Pipe(g["term", "identifier"],
+                            (x, y) => Tuple.Create(2, x, y)),
+                        g["symbol", "increment"].Or(g["symbol", "decrement"])
+                            .Select(x => Tuple.Create(3, x, YacqExpression.Ignore() as YacqExpression))
+                    ).Many(1),
+                    (factor, list) => list.Aggregate(factor, (p, t) =>
                     {
-                        case 0:
-                            //TODO: メソッド
-                            throw new NotImplementedException();
-                        case 1:
-                            //TODO: インデクサ
-                            throw new NotImplementedException();
-                        case 2:
-                            return YacqExpression.List(t.Item2, factor, t.Item3);
-                        default:
-                            return YacqExpression.List(t.Item2, factor); //TODO: hoge++ と ++hoge の挙動を変える
-                    }
-                })
-            ));
+                        switch (t.Item1)
+                        {
+                            case 0:
+                                //TODO: メソッド
+                                return YacqExpression.Ignore();
+                            case 1:
+                                //TODO: インデクサ
+                                return YacqExpression.Ignore();
+                            case 2:
+                                return YacqExpression.List(t.Item2, factor, t.Item3);
+                            default:
+                                return YacqExpression.List(t.Item2, factor); //TODO: hoge++ と ++hoge の挙動を変える
+                        }
+                    })
+                )
+                .Or(g["root", "factor"])
+            );
 
             this.Add("list", "args", g => g["expr", "assign"].SepBy(1, g["symbol", "comma"])
                 .Select(exprs => new NlListExpression(exprs)));
@@ -248,8 +249,7 @@ namespace NNotepadLang
                 g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
-                g["root", "expr"].Between(g["keyword", "return"], g["root", "endline"])
-                    .Select(x => null as YacqExpression) //TODO
+                g["root", "expr"].Between(g["keyword", "return"], g["root", "endline"]) //TODO
             ));
 
             this.Add("stmt", "class", g => Combinator.Choice(
@@ -263,8 +263,7 @@ namespace NNotepadLang
             this.Add("stmt", "module", g => Combinator.Choice(
                 g["def", "module"],
                 g["def", "class"],
-                g["name", "class"].Between(g["keyword", "include"], g["root", "endline"])
-                    .Select(x => null as YacqExpression) //TODO
+                g["name", "class"].Between(g["keyword", "include"], g["root", "endline"]) //TODO
             ));
 
             this.Add("stmt", "global", g => Combinator.Choice(
@@ -305,7 +304,7 @@ namespace NNotepadLang
             ));
 
             this.Add("root", "program", g =>
-                g["root", "space?"].Right(g["stmt", "global"]).Many()
+                g["root", "space?"].Right(g["stmt", "global"]).Many(1)
                     .Select(x => YacqExpression.AmbiguousLambda(x)));
 
             this.Add("def", "method", g => g["deco", "access"].Maybe().Pipe(
@@ -502,9 +501,12 @@ namespace NNotepadLang
 
         private void AddBinaryOperator(string name, string category, string id, string next, string prev = null)
         {
-            this.Add("expr", name, g => g["expr", prev ?? next].Pipe(g[category, id], g["expr", name],
-                (left, op, right) => YacqExpression.List(op, left, right)
-            ));
+            this.Add("expr", name, g => g["expr", prev ?? next]
+                .Pipe(g[category, id], g["expr", name],
+                    (left, op, right) => YacqExpression.List(op, left, right)
+                )
+                .Or(g["expr", next])
+            );
         }
 
         private bool isReadOnly = false;
