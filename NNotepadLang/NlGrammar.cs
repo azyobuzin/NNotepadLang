@@ -174,25 +174,6 @@ namespace NNotepadLang
                 .Select(exprs => new NlClassNameExpression(exprs.Select(expr => (expr as IdentifierExpression).Name)))
             );
 
-            this.AddBinaryOperator("assign", "op", "assign", "bool_or", "unary");
-            this.AddBinaryOperator("bool_or", "symbol", "bool_orelse", "bool_and");
-            this.AddBinaryOperator("bool_and", "symbol", "bool_andalso", "or");
-            this.AddBinaryOperator("or", "symbol", "bin_or", "xor");
-            this.AddBinaryOperator("xor", "symbol", "bin_xor", "and");
-            this.AddBinaryOperator("and", "symbol", "bin_and", "eq");
-            this.AddBinaryOperator("eq", "op", "eq", "rel");
-            this.AddBinaryOperator("rel", "op", "rel", "shift");
-            this.AddBinaryOperator("shift", "op", "shift", "add");
-            this.AddBinaryOperator("add", "op", "add", "mul");
-            this.AddBinaryOperator("mul", "op", "mul", "unary");
-
-            this.Add("expr", "unary", g => Combinator.Choice(
-                g["expr", "post"],
-                g["op", "prefix"].Pipe(g["root", "factor"], (x, y) => YacqExpression.List(x, y) as YacqExpression),
-                g["symbol", "increment"].Or(g["symbol", "decrement"])
-                    .Pipe(g["expr", "unary"], (x, y) => YacqExpression.List(x, y) as YacqExpression)
-            ));
-
             this.Add("expr", "post", g => g["root", "factor"]
                 .Pipe(
                     Combinator.Choice(
@@ -225,7 +206,38 @@ namespace NNotepadLang
                 .Or(g["root", "factor"])
             );
 
-            this.Add("list", "args", g => g["expr", "assign"].SepBy(1, g["symbol", "comma"])
+            this.Add("expr", "unary", g => Combinator.Choice(
+                g["expr", "post"],
+                g["op", "prefix"].Pipe(g["root", "factor"], (x, y) => YacqExpression.List(x, y) as YacqExpression),
+                g["symbol", "increment"].Or(g["symbol", "decrement"])
+                    .Pipe(g["expr", "unary"], (x, y) => YacqExpression.List(x, y) as YacqExpression)
+            ));
+
+            this.AddBinaryOperator("mul", "op", "mul", "unary");
+            this.AddBinaryOperator("add", "op", "add", "mul");
+            this.AddBinaryOperator("shift", "op", "shift", "add");
+            this.AddBinaryOperator("rel", "op", "rel", "shift");
+            this.AddBinaryOperator("eq", "op", "eq", "rel");
+            this.AddBinaryOperator("and", "symbol", "bin_and", "eq");
+            this.AddBinaryOperator("xor", "symbol", "bin_xor", "and");
+            this.AddBinaryOperator("or", "symbol", "bin_or", "xor");
+            this.AddBinaryOperator("bool_and", "symbol", "bool_andalso", "or");
+            this.AddBinaryOperator("bool_or", "symbol", "bool_orelse", "bool_and");
+
+            this.Add("expr", "assign", g =>
+                g["expr", "bool_or"].Pipe(
+                    g["op", "assign"],
+                    Tuple.Create
+                )
+                .Many()
+                .Pipe(
+                    g["expr", "bool_or"],
+                    (left, right) => left.Reverse().Aggregate(right, (expr, t) =>
+                        YacqExpression.List(t.Item2, t.Item1, expr))
+                )
+            );
+
+            this.Add("list", "args", g => g["expr"].Last().SepBy(1, g["symbol", "comma"])
                 .Select(exprs => new NlListExpression(exprs)));
 
             this.Add("list", "method_args", g => g["term", "identifier"].SepBy(1, g["symbol", "comma"])
@@ -234,7 +246,7 @@ namespace NNotepadLang
             this.Add("list", "classes", g => g["name", "class"].SepBy(1, g["symbol", "comma"])
                 .Select(exprs => new NlListExpression(exprs)));
 
-            this.Add("root", "expr", g => g["expr", "assign"].SepBy(1, g["symbol", "comma"])
+            this.Add("root", "expr", g => g["expr"].Last().SepBy(1, g["symbol", "comma"])
                 .Select(exprs => new NlListExpression(exprs))); //TODO: もしかして最後だけが戻り値になる的な？
 
             this.Add("method", "calling", g => g["list", "args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"])
@@ -501,12 +513,14 @@ namespace NNotepadLang
 
         private void AddBinaryOperator(string name, string category, string id, string next, string prev = null)
         {
-            this.Add("expr", name, g => g["expr", prev ?? next]
-                .Pipe(g[category, id], g["expr", name],
-                    (left, op, right) => YacqExpression.List(op, left, right)
+            this.Add("expr", name, g => g["expr", prev ?? next].Pipe(
+                g[category, id].Pipe(
+                    g["expr", next],
+                    Tuple.Create
                 )
-                .Or(g["expr", next])
-            );
+                .Many(),
+                (left, right) => right.Aggregate(left, (l, t) => YacqExpression.List(t.Item1, left, t.Item2))
+            ));
         }
 
         private bool isReadOnly = false;
