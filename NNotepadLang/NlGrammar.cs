@@ -31,11 +31,11 @@ namespace NNotepadLang
             this.Add("root", "comment", g => g["comment", "line"].Or(g["comment", "multi"]));
 
             this.Add("comment", "line", g => Chars.Sequence("//")
-                .Right(g["root", "pnl"].Not().Many().Select(Ignore)));
+                .Right(g["root", "pnl"].Not().And().Right(Chars.Any()).Many().Select(Ignore)));
 
             var commentStart = Chars.Sequence("/*");
             var commentEnd = Chars.Sequence("*/");
-            this.Add("comment", "multi", g => commentEnd.Not().Many()
+            this.Add("comment", "multi", g => commentEnd.Not().And().Right(Chars.Any()).Many()
                 .Between(commentStart, commentEnd).Select(Ignore));
 
             this.AddSymbols(
@@ -456,6 +456,7 @@ namespace NNotepadLang
 
             this.Add("line", "require", g => g["term", "string"].Between(g["keyword", "require"], g["root", "endline"])); //TODO: Select
 
+            this.Add("root", "ignore", g => g["root", "space?"]);
             this.Set.Default = g => g["root", "program"];
         }
 
@@ -467,7 +468,7 @@ namespace NNotepadLang
         private void Add<T>(string category, string id, Func<RuleGetter, Parser<char, T>> rule)
             where T : YacqExpression
         {
-            this.Add(category, id, g => rule(g).Select(x => x as YacqExpression));
+            base.Add(category, id, g => rule(g).Select(x => x as YacqExpression));
         }
 
         private void AddSymbols(params Expression<Func<object, string>>[] syms)
