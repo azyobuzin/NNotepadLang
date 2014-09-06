@@ -63,6 +63,7 @@
     <Compile Include="Expressions\NlUnlessExpression.cs" />
     <Compile Include="Expressions\NlWhileExpression.cs" />
     <Compile Include="NlGrammar.cs" />
+    <Compile Include="ParserExtensions.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="VariableType.cs" />
   </ItemGroup>

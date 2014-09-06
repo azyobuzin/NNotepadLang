@@ -25,16 +25,16 @@ namespace NNotepadLang
             this.Add("root", "endline", g => ';'.Satisfy().Right(g["root", "space?"]));
 
             this.Add("root", "pnl", g =>
-                Combinator.Choice(Chars.Sequence("\r\n"), Chars.Sequence("\r"), Chars.Sequence("\n"))
+                Combinator.Choice("\r\n".Sequence(), "\r".Sequence(), "\n".Sequence())
                     .Select(Ignore));
 
             this.Add("root", "comment", g => g["comment", "line"].Or(g["comment", "multi"]));
 
-            this.Add("comment", "line", g => Chars.Sequence("//")
+            this.Add("comment", "line", g => "//".Sequence()
                 .Right(g["root", "pnl"].Not().And().Right(Chars.Any()).Many().Select(Ignore)));
 
-            var commentStart = Chars.Sequence("/*");
-            var commentEnd = Chars.Sequence("*/");
+            var commentStart = "/*".Sequence();
+            var commentEnd = "*/".Sequence();
             this.Add("comment", "multi", g => commentEnd.Not().And().Right(Chars.Any()).Many()
                 .Between(commentStart, commentEnd).Select(Ignore));
 
@@ -468,7 +468,7 @@ namespace NNotepadLang
         private void Add<T>(string category, string id, Func<RuleGetter, Parser<char, T>> rule)
             where T : YacqExpression
         {
-            base.Add(category, id, g => rule(g).Select(x => x as YacqExpression));
+            base.Add(category, id, g => Combinator.Lazy(() => rule(g).Select(x => x as YacqExpression)));
         }
 
         private void AddSymbols(params Expression<Func<object, string>>[] syms)
@@ -476,7 +476,7 @@ namespace NNotepadLang
             foreach (var expr in syms)
             {
                 this.Add("symbol", expr.Parameters[0].Name,
-                    g => Chars.Sequence((expr.Body as ConstantExpression).Value as string)
+                    g => ((expr.Body as ConstantExpression).Value as string).Sequence()
                         .Select(c => YacqExpression.Identifier(string.Concat(c)))
                         .Left(g["root", "space?"]));
             }
@@ -486,7 +486,7 @@ namespace NNotepadLang
         {
             foreach (var name in names)
             {
-                this.Add("keyword", name, g => Chars.Sequence(name).Right(g["root", "space?"].Select(Ignore)));
+                this.Add("keyword", name, g => name.Sequence().Right(g["root", "space?"].Select(Ignore)));
             }
         }
 
