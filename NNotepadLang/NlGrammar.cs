@@ -15,7 +15,8 @@ namespace NNotepadLang
         {
             this.Add("root", "space", g => g["root", "comment"].Ignore()
                 .Or(Chars.OneOf(' ', '\t', '\v', '\f', '\r', '\n').Ignore())
-                .Many(1).Select(Ignore));
+                .Many(1).Select(Ignore)
+            );
             this.Add("root", "space?", g => g["root", "space"].Maybe().Select(Ignore));
             this.Add("root", "lparen", g => '('.Satisfy().Right(g["root", "space?"]));
             this.Add("root", "rparen", g => ')'.Satisfy().Right(g["root", "space?"]));
@@ -30,12 +31,13 @@ namespace NNotepadLang
 
             this.Add("root", "comment", g => g["comment", "line"].Or(g["comment", "multi"]));
 
-            this.Add("comment", "line", g => "//".Sequence()
-                .Right(g["root", "pnl"].Not().And().Right(Chars.Any()).Many().Select(Ignore)));
+            this.Add("comment", "line", g =>
+                Combinator.Sequence("//".Sequence(), Chars.NoneOf('\r', '\n').Many()).Select(Ignore)
+            );
 
             var commentStart = "/*".Sequence();
             var commentEnd = "*/".Sequence();
-            this.Add("comment", "multi", g => commentEnd.Not().And().Right(Chars.Any()).Many()
+            this.Add("comment", "multi", g => commentEnd.Not().Right(Chars.Any()).Many()
                 .Between(commentStart, commentEnd).Select(Ignore));
 
             this.AddSymbols(
@@ -104,7 +106,7 @@ namespace NNotepadLang
 
             this.Add("term", "string", g => Chars.NoneOf('\\', '"')
                 .Or('\\'.Satisfy().Right(Chars.Any()))
-                .Many().Between('"'.Satisfy(), '"'.Satisfy())
+                .Many().Between('"'.Satisfy(), '"'.Satisfy().Right(g["root", "space?"]))
                 .Select(c => YacqExpression.Text('"', string.Concat(c)))
             );
 
@@ -165,8 +167,8 @@ namespace NNotepadLang
                 KeywordToIdentifier(g, "true"),
                 KeywordToIdentifier(g, "false"),
                 KeywordToIdentifier(g, "nil"),
-                g["root", "expr"].Or(g["value", "block"])
-                    .Between(g["root", "lparen"], g["root", "rparen"])
+                g["root", "expr"].Between(g["root", "lparen"], g["root", "rparen"]),
+                g["value", "block"].Between(g["root", "lparen"], g["root", "rparen"])                    
             ));
 
             this.Add("name", "class", g => g["term", "identifier"]
@@ -323,7 +325,7 @@ namespace NNotepadLang
                g["keyword", "override"].Maybe(),
                g["keyword", "native"].Maybe(),
                g["keyword", "def"].Right(g["term", "identifier"]),
-               g["list", "method_args"].Between(g["root", "lparen"], g["root", "rparen"]).Maybe().Left(g["root", "newline"]),
+               g["list", "method_args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"]).Maybe().Left(g["root", "newline"]),
                g["stmt", "method"].Many().Left(g["keyword", "fed"]).Left(g["root", "endline"].Maybe()),
                (access, @override, native, name, args, body) =>
                    new NlDefMethodExpression(access, @override, native, name, args, body)
@@ -416,9 +418,9 @@ namespace NNotepadLang
                 (desc, cond) => new NlIfExpression(cond, desc)
             ));
 
-            this.Add("block", "switch", g => g["keyword", "switch"].Right(g["root", "expr"])
+            this.Add("block", "switch", g => g["root", "expr"].Maybe().Between(g["keyword", "switch"], g["root", "newline"])
                 .Pipe(
-                    Combinator.Sequence(g["root", "newline"], g["keyword", "case"]).Right(g["root", "expr"])
+                    g["keyword", "case"].Right(g["root", "expr"])
                         .Both(g["root", "newline"].Right(g["stmt", "block"].Many())).Many(),
                     Combinator.Sequence(g["keyword", "default"], g["root", "newline"])
                         .Right(g["stmt", "block"].Many()).Maybe(),
@@ -497,7 +499,7 @@ namespace NNotepadLang
         {
             foreach (var name in names)
             {
-                this.Add("keyword", name, g => name.Sequence().Right(g["root", "space?"].Select(Ignore)));
+                this.Add("keyword", name, g => name.Sequence().Right(g["root", "space?"]));
             }
         }
 

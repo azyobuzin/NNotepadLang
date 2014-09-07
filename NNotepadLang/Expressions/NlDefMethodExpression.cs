@@ -7,15 +7,15 @@ namespace NNotepadLang.Expressions
 {
     public class NlDefMethodExpression : NlEmptyExpression
     {
-        public NlDefMethodExpression(IOption<YacqExpression> access, IOption<YacqExpression> isOverride, IOption<YacqExpression> isNative, YacqExpression name, IOption<YacqExpression> args, IEnumerable<YacqExpression> body)
+        public NlDefMethodExpression(IOption<YacqExpression> access, IOption<YacqExpression> isOverride, IOption<YacqExpression> isNative, YacqExpression name, IOption<IOption<YacqExpression>> args, IEnumerable<YacqExpression> body)
         {
             this.Access = access.Select(x => (x as NlAccessModifierExpression).Access).Otherwise(() => AccessModifier.Public);
             this.IsOverride = isOverride.HasValue;
             this.IsNative = isNative.HasValue;
             this.Name = (name as IdentifierExpression).Name;
-            this.Args = args
-                .Select(expr => (expr as NlListExpression).Expressions.Cast<IdentifierExpression>().Select(x => x.Name).ToArray())
-                .Otherwise(() => new string[0]);
+            this.Args = args.HasValue && args.Value.HasValue
+                ? (args.Value.Value as NlListExpression).Expressions.Cast<IdentifierExpression>().Select(x => x.Name).ToArray()
+                : new string[0];
             this.Body = body.ToArray();
         }
 

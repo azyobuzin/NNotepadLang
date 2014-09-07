@@ -10,10 +10,10 @@ namespace NNotepadLang.Expressions
 {
     public class NlSwitchExpression : YacqExpression
     {
-        public NlSwitchExpression(YacqExpression cond, IEnumerable<Tuple<YacqExpression, IEnumerable<YacqExpression>>> cases, IOption<IEnumerable<YacqExpression>> defaultExprs)
+        public NlSwitchExpression(IOption<YacqExpression> cond, IEnumerable<Tuple<YacqExpression, IEnumerable<YacqExpression>>> cases, IOption<IEnumerable<YacqExpression>> defaultExprs)
             : base(null)
         {
-            this.Cond = cond;
+            this.Cond = cond.Otherwise(() => YacqExpression.Identifier("true"));
             this.Cases = cases
                 .Select(t => Tuple.Create(
                     (t.Item1 as NlListExpression).Expressions,
