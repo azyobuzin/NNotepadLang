@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using XSpect.Yacq.Expressions;
 using XSpect.Yacq.Symbols;
@@ -13,19 +12,19 @@ namespace NNotepadLang.Expressions
             : base(null)
         {
             this.Cond = cond;
-            this.Expressions = exprs.ToArray();
+            this.Expressions = new NlBlockExpression(exprs);
         }
 
         public NlWhileExpression(YacqExpression cond, YacqExpression expr)
             : base(null)
         {
             this.Cond = cond;
-            this.Expressions = new[] { expr };
+            this.Expressions = new NlBlockExpression(expr);
         }
 
         public YacqExpression Cond { get; private set; }
-        public IReadOnlyList<YacqExpression> Expressions { get; private set; }
-        
+        public NlBlockExpression Expressions { get; private set; }
+
         protected override Expression ReduceImpl(SymbolTable symbols, Type expectedType)
         {
             var breakLabel = Expression.Label();
@@ -38,14 +37,19 @@ namespace NNotepadLang.Expressions
             return Expression.Loop(
                 Expression.Block(
                     Expression.IfThen(
-                        Expression.IsFalse(this.Cond.Reduce(symbols)),
+                        Expression.IsFalse(Expression.Convert(this.Cond.Reduce(symbols), typeof(bool))),
                         Expression.Break(breakLabel)
                     ),
-                    Expression.Invoke(YacqExpression.AmbiguousLambda(this.Expressions).Reduce(symbols))
+                    this.Expressions.Reduce(blockSymbols)
                 ),
                 breakLabel,
                 continueLabel
             );
+        }
+
+        public override string ToString()
+        {
+            return "while " + this.Cond.ToString() + ":" + this.Expressions.ToString() + "\nelihw";
         }
     }
 }

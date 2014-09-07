@@ -47,6 +47,7 @@
   <ItemGroup>
     <Compile Include="AccessModifier.cs" />
     <Compile Include="Expressions\NlAccessModifierExpression.cs" />
+    <Compile Include="Expressions\NlBlockExpression.cs" />
     <Compile Include="Expressions\NlClassNameExpression.cs" />
     <Compile Include="Expressions\NlDefClassExpression.cs" />
     <Compile Include="Expressions\NlDefMethodExpression.cs" />
@@ -58,15 +59,17 @@
     <Compile Include="Expressions\NlForExpression.cs" />
     <Compile Include="Expressions\NlIfExpression.cs" />
     <Compile Include="Expressions\NlListExpression.cs" />
+    <Compile Include="Expressions\NlListExpression`1.cs" />
     <Compile Include="Expressions\NlScriptExpression.cs" />
     <Compile Include="Expressions\NlSwitchExpression.cs" />
-    <Compile Include="Expressions\NlSymbolExpression.cs" />
     <Compile Include="Expressions\NlTreeExpression.cs" />
     <Compile Include="Expressions\NlUnlessExpression.cs" />
     <Compile Include="Expressions\NlWhileExpression.cs" />
     <Compile Include="NlGrammar.cs" />
+    <Compile Include="NotepadLang.cs" />
     <Compile Include="ParserExtensions.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RootSymbols.cs" />
     <Compile Include="VariableType.cs" />
   </ItemGroup>
   <ItemGroup>

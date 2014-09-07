@@ -13,25 +13,30 @@ namespace NNotepadLang.Expressions
             : base(null)
         {
             this.Cond = cond;
-            this.Expressions = exprs.ToArray();
+            this.Expressions = new NlBlockExpression(exprs);
         }
 
         public NlUnlessExpression(YacqExpression cond, YacqExpression expr)
             : base(null)
         {
             this.Cond = cond;
-            this.Expressions = new[] { expr };
+            this.Expressions = new NlBlockExpression(expr);
         }
 
         public YacqExpression Cond { get; private set; }
-        public IReadOnlyList<YacqExpression> Expressions { get; private set; }
+        public NlBlockExpression Expressions { get; private set; }
 
         protected override Expression ReduceImpl(SymbolTable symbols, Type expectedType)
         {
             return Expression.IfThen(
-                this.Cond.Reduce(symbols),
-                Expression.Invoke(YacqExpression.AmbiguousLambda(this.Expressions).Reduce(symbols))
+                Expression.IsFalse(Expression.Convert(this.Cond.Reduce(symbols), typeof(bool))),
+                this.Expressions.Reduce(symbols)
             );
+        }
+
+        public override string ToString()
+        {
+            return "unless " + this.Cond.ToString() + ":" + this.Expressions.ToString() + "\nsselnu";
         }
     }
 }

@@ -17,18 +17,18 @@ namespace NNotepadLang.Cmd
     {
         static void Main(string[] args)
         {
-            var exprs = new Reader(NlGrammar.Default).Read(File.ReadAllText(@"C:\Users\azyobuzin\Desktop\test.np"));
-            Debugger.Break();
+            var code = @"scr:
+for i in [1 to 10]:
+    print(i);
+rof
+rcs";
+            Console.WriteLine(NotepadLang.ReadAll(code).Last());
+            Console.WriteLine();
 
-            var g = NlGrammar.Default.Get;
+            NotepadLang.ParseAction(code).Compile()();
 
-            var test = g["root", "space?"];
-            var ret = test(@"/*aaaaaavcxvc*//*aaa
-            
-            */
-abc".AsStream());
-
-            Console.Write(ret.Status);
+            Console.WriteLine();
+            Console.WriteLine("end");
             Console.ReadKey();
         }
     }

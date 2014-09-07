@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using NNotepadLang.Expressions;
 using Parseq;
 using Parseq.Combinators;
+using XSpect.Yacq.Dynamic;
 using XSpect.Yacq.Expressions;
 using XSpect.Yacq.LanguageServices;
 
@@ -163,19 +164,20 @@ namespace NNotepadLang
             this.Add("op", "mul", SymbolChoice("multiple", "divide", "modulus"));
 
             this.Add("root", "factor", g => Combinator.Choice(
+                KeywordToIdentifier(g, "true"),
+                KeywordToIdentifier(g, "false"),
+                KeywordToIdentifier(g, "nil"),
                 g["term", "string"],
                 g["term", "number"],
                 g["term", "tree"],
                 g["term", "identifier"],
-                KeywordToIdentifier(g, "true"),
-                KeywordToIdentifier(g, "false"),
-                KeywordToIdentifier(g, "nil"),
                 g["expr", "assign"].Between(g["root", "lparen"], g["root", "rparen"]),
                 g["value", "block"].Between(g["root", "lparen"], g["root", "rparen"]),
                 g["list", "expr"].Between(g["root", "lbracket"], g["root", "rbracket"]),
                 g["expr", "assign"].Between(g["root", "lbracket"], g["keyword", "to"]).Pipe(
                     g["expr", "assign"].Left(g["root", "rbracket"]),
-                    (start, end) => YacqExpression.Ignore()
+                    (start, end) => YacqExpression.TypeCandidate(typeof(Enumerable))
+                        .Method("Range", start, YacqExpression.Function("++", YacqExpression.Function("-", end, start)))
                 )
             ));
 
@@ -198,28 +200,30 @@ namespace NNotepadLang
                 .Pipe(
                     Combinator.Choice(
                         g["list", "args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"])
-                            .Select(expr => Tuple.Create(0, expr.Otherwise(() => new NlListExpression()), YacqExpression.Ignore() as YacqExpression)),
+                            .Select(expr => Tuple.Create(0, expr.Otherwise(() => new NlListExpression()))),
                         g["expr", "assign"].Between(g["root", "lbracket"], g["root", "rbracket"])
-                            .Select(expr => Tuple.Create(1, expr, YacqExpression.Ignore() as YacqExpression)),
-                        g["symbol", "member"].Pipe(g["term", "identifier"],
-                            (x, y) => Tuple.Create(2, x, y)),
-                        g["symbol", "increment"].Or(g["symbol", "decrement"])
-                            .Select(x => Tuple.Create(3, x, YacqExpression.Ignore() as YacqExpression))
+                            .Select(expr => Tuple.Create(1, expr)),
+                        g["symbol", "member"].Right(g["term", "identifier"])
+                            .Select(x => Tuple.Create(2, x)),
+                        g["symbol", "increment"]
+                            .Select(x => Tuple.Create(3, x)),
+                        g["symbol", "decrement"]
+                            .Select(x => Tuple.Create(4, x))
                     ).Many(1),
                     (factor, list) => list.Aggregate(factor, (p, t) =>
                     {
                         switch (t.Item1)
                         {
                             case 0:
-                                //TODO: メソッド
-                                return YacqExpression.Ignore();
+                                return YacqExpression.List(new[] { factor }.Concat((t.Item2 as NlListExpression).Expressions));
                             case 1:
-                                //TODO: インデクサ
-                                return YacqExpression.Ignore();
+                                return YacqExpression.Function(".", factor, YacqExpression.Vector(t.Item2));
                             case 2:
-                                return YacqExpression.List(t.Item2, factor, t.Item3);
+                                return YacqExpression.Function(".", factor, t.Item2);
+                            case 3:
+                                return YacqExpression.Function("=++", factor);
                             default:
-                                return YacqExpression.List(t.Item2, factor); //TODO: hoge++ と ++hoge の挙動を変える
+                                return YacqExpression.Function("=--", factor);
                         }
                     })
                 )
@@ -229,8 +233,8 @@ namespace NNotepadLang
             this.Add("expr", "unary", g => Combinator.Choice(
                 g["expr", "post"],
                 g["op", "prefix"].Pipe(g["expr", "post"], (x, y) => YacqExpression.List(x, y) as YacqExpression),
-                g["symbol", "increment"].Or(g["symbol", "decrement"])
-                    .Pipe(g["expr", "post"], (x, y) => YacqExpression.List(x, y) as YacqExpression)
+                g["symbol", "increment"].Right(g["expr", "post"]).Select(x => YacqExpression.Function("++=", x)),
+                g["symbol", "decrement"].Right(g["expr", "post"]).Select(x => YacqExpression.Function("--=", x))
             ));
 
             this.AddBinaryOperator("mul", "op", "mul", "unary");
@@ -321,6 +325,8 @@ namespace NNotepadLang
             ));
 
             this.Add("stmt", "block", g => Combinator.Choice(
+                g["keyword", "continue"].Left(g["root", "endline"]).Select(_ => YacqExpression.Function("$continue")),
+                g["keyword", "break"].Left(g["root", "endline"]).Select(_ => YacqExpression.Function("$break")),
                 g["list", "expr"].Left(g["root", "endline"]),
                 g["def", "local_var"],
                 g["def", "instance_var"],
@@ -329,8 +335,6 @@ namespace NNotepadLang
                 g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
-                g["keyword", "continue"].Left(g["root", "endline"]),
-                g["keyword", "break"].Left(g["root", "endline"]),
                 g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]),
                 g["expr", "assign"].Between(g["keyword", "yield"], g["root", "endline"])
             ));
@@ -350,7 +354,8 @@ namespace NNotepadLang
 
             this.Add("root", "program", g =>
                 g["root", "space?"].Right(g["stmt", "global"]).Many(1)
-                    .Select(x => YacqExpression.AmbiguousLambda(x)));
+                    .Select(x => new NlBlockExpression(x))
+            );
 
             this.Add("def", "method", g => g["deco", "access"].Maybe().Pipe(
                g["keyword", "override"].Maybe(),

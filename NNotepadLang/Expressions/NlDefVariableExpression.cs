@@ -17,20 +17,39 @@ namespace NNotepadLang.Expressions
             : base(null)
         {
             this.VariableType = type;
-            this.Expression = expr;
+            this.Expressions = expr as NlListExpression;
         }
 
         public VariableType VariableType { get; private set; }
-        public YacqExpression Expression { get; private set; }
+        public NlListExpression Expressions { get; private set; }
 
         protected override Expression ReduceImpl(SymbolTable symbols, Type expectedType)
         {
-            throw new NotImplementedException();
+            var names = this.Expressions.Expressions.Cast<ListExpression>()
+                .Select(expr => (expr.Elements[1] as IdentifierExpression).Name);
+
+            switch (this.VariableType)
+            {
+                case VariableType.Local:
+                    foreach (var name in names)
+                    {
+                        var v = Expression.Variable(typeof(object), name);
+                        symbols["$local"] =
+                            (symbols["$local"] as NlListExpression<ParameterExpression>).Add(v);
+                        var expr = YacqExpression.Contextful(v, ContextType.Dynamic);
+                        symbols[name] = expr;
+                    }
+                    break;
+                default:
+                    throw new NotImplementedException();
+            }
+
+            return this.Expressions;
         }
 
         public override string ToString()
         {
-            return this.VariableType.ToString().ToLowerInvariant() + " " + this.Expression.ToString();
+            return this.VariableType.ToString().ToLowerInvariant() + " " + this.Expressions.ToString();
         }
 
         public static NlDefVariableExpression Local(YacqExpression expr)

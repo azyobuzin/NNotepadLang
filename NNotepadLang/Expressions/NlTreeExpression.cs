@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text;
 using Parseq;
 using XSpect.Yacq.Expressions;
 using XSpect.Yacq.Symbols;
@@ -34,11 +35,17 @@ namespace NNotepadLang.Expressions
             var addMethod = dicType.GetMethod("Add");
             foreach (var t in this.Pairs)
             {
-                body.Add(Expression.Call(dicVar, addMethod, Expression.Constant(t.Item1), t.Item2.Reduce(symbols)));
+                body.Add(Expression.Call(dicVar, addMethod, Expression.Constant(t.Item1),
+                    Expression.Convert(t.Item2.Reduce(symbols), typeof(object))));
             }
 
             body.Add(dicVar);
             return Expression.Block(new[] { dicVar }, body);
+        }
+
+        public override string ToString()
+        {
+            return "tree: " + string.Join(", ", this.Pairs.Select(p => p.Item1 + "=>" + p.Item2.ToString())) + " eert";
         }
     }
 }

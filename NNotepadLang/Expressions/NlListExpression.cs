@@ -25,7 +25,7 @@ namespace NNotepadLang.Expressions
 
         public override string ToString()
         {
-            return string.Format("({0})", string.Join(", ", this.Expressions));
+            return string.Join(", ", this.Expressions);
         }
 
         protected override Expression ReduceImpl(SymbolTable symbols, Type expectedType)
