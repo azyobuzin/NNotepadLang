@@ -51,6 +51,7 @@
     <Compile Include="Expressions\NlDefClassExpression.cs" />
     <Compile Include="Expressions\NlDefMethodExpression.cs" />
     <Compile Include="Expressions\NlDefModuleExpression.cs" />
+    <Compile Include="Expressions\NlDefParaExpression.cs" />
     <Compile Include="Expressions\NlDefPropertyExpression.cs" />
     <Compile Include="Expressions\NlDefVariableExpression.cs" />
     <Compile Include="Expressions\NlEmptyExpression.cs" />
@@ -60,6 +61,7 @@
     <Compile Include="Expressions\NlScriptExpression.cs" />
     <Compile Include="Expressions\NlSwitchExpression.cs" />
     <Compile Include="Expressions\NlSymbolExpression.cs" />
+    <Compile Include="Expressions\NlTreeExpression.cs" />
     <Compile Include="Expressions\NlUnlessExpression.cs" />
     <Compile Include="Expressions\NlWhileExpression.cs" />
     <Compile Include="NlGrammar.cs" />

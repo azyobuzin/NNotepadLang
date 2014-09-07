@@ -32,7 +32,7 @@ namespace NNotepadLang
             this.Add("root", "comment", g => g["comment", "line"].Or(g["comment", "multi"]));
 
             this.Add("comment", "line", g =>
-                Combinator.Sequence("//".Sequence(), Chars.NoneOf('\r', '\n').Many()).Select(Ignore)
+                "//".Sequence().IgnoreSeq(Chars.NoneOf('\r', '\n').Many())
             );
 
             var commentStart = "/*".Sequence();
@@ -54,10 +54,13 @@ namespace NNotepadLang
                 assign_or => "|=",
                 assign_and => "&=",
                 bool_equ => "==",
+                bool_in => "~=",
                 bool_neq => "!=",
                 bool_gre => ">=",
                 bool_lee => "<=",
+                pair_let => "=>",
                 module_access => "::",
+                range => "..",
                 bool_andalso => "&&",
                 bool_orelse => "||",
                 right_shift => ">>",
@@ -88,7 +91,8 @@ namespace NNotepadLang
                "switch", "case", "break", "default", "hctiws", "return",
                "include", "mix", "extends", "implements", "override", "native", "self",
                "public", "protected", "private", "unless", "sselnu",
-               "scr", "rcs", "lambda", "require"
+               "scr", "rcs", "lambda", "require", "as", "with", "to", "tree", "eert", "yield",
+               "para", "arap"
             );
 
             var digit = Chars.Number();
@@ -141,7 +145,8 @@ namespace NNotepadLang
                 "bool_equ_s",
                 "bool_neq_s",
                 "bool_equ",
-                "bool_neq"
+                "bool_neq",
+                "bool_in"
             ));
 
             this.Add("op", "rel", SymbolChoice(
@@ -160,15 +165,28 @@ namespace NNotepadLang
             this.Add("root", "factor", g => Combinator.Choice(
                 g["term", "string"],
                 g["term", "number"],
-                g["term", "identifier"]/*.Pipe(
-                    g["list", "args"].Between(g["root", "lparen"], g["root", "rparen"]).Maybe(),
-                    (x, y) => YacqExpression.List(x) as YacqExpression //TODO
-                )*/ /* Ruby 版の更新 */,
+                g["term", "tree"],
+                g["term", "identifier"],
                 KeywordToIdentifier(g, "true"),
                 KeywordToIdentifier(g, "false"),
                 KeywordToIdentifier(g, "nil"),
-                g["root", "expr"].Between(g["root", "lparen"], g["root", "rparen"]),
-                g["value", "block"].Between(g["root", "lparen"], g["root", "rparen"])                    
+                g["expr", "assign"].Between(g["root", "lparen"], g["root", "rparen"]),
+                g["value", "block"].Between(g["root", "lparen"], g["root", "rparen"]),
+                g["list", "expr"].Between(g["root", "lbracket"], g["root", "rbracket"]),
+                g["expr", "assign"].Between(g["root", "lbracket"], g["keyword", "to"]).Pipe(
+                    g["expr", "assign"].Left(g["root", "rbracket"]),
+                    (start, end) => YacqExpression.Ignore()
+                )
+            ));
+
+            this.Add("term", "tree", g => g["term", "pair"].SepBy(1, g["symbol", "comma"]).Maybe()
+                .Between(g["keyword", "tree"].IgnoreSeq(g["root", "newline"]), g["keyword", "eert"])
+                .Select(pairs => new NlTreeExpression(pairs))
+            );
+
+            this.Add("term", "pair", g => g["term", "identifier"].Pipe(
+                g["symbol", "pair_let"].Right(g["expr", "bool_or"]),
+                (key, value) => new NlListExpression(key, value)
             ));
 
             this.Add("name", "class", g => g["term", "identifier"]
@@ -181,7 +199,7 @@ namespace NNotepadLang
                     Combinator.Choice(
                         g["list", "args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"])
                             .Select(expr => Tuple.Create(0, expr.Otherwise(() => new NlListExpression()), YacqExpression.Ignore() as YacqExpression)),
-                        g["root", "expr"].Between(g["root", "lbracket"], g["root", "rbracket"])
+                        g["expr", "assign"].Between(g["root", "lbracket"], g["root", "rbracket"])
                             .Select(expr => Tuple.Create(1, expr, YacqExpression.Ignore() as YacqExpression)),
                         g["symbol", "member"].Pipe(g["term", "identifier"],
                             (x, y) => Tuple.Create(2, x, y)),
@@ -210,9 +228,9 @@ namespace NNotepadLang
 
             this.Add("expr", "unary", g => Combinator.Choice(
                 g["expr", "post"],
-                g["op", "prefix"].Pipe(g["root", "factor"], (x, y) => YacqExpression.List(x, y) as YacqExpression),
+                g["op", "prefix"].Pipe(g["expr", "post"], (x, y) => YacqExpression.List(x, y) as YacqExpression),
                 g["symbol", "increment"].Or(g["symbol", "decrement"])
-                    .Pipe(g["expr", "unary"], (x, y) => YacqExpression.List(x, y) as YacqExpression)
+                    .Pipe(g["expr", "post"], (x, y) => YacqExpression.List(x, y) as YacqExpression)
             ));
 
             this.AddBinaryOperator("mul", "op", "mul", "unary");
@@ -248,14 +266,11 @@ namespace NNotepadLang
             this.Add("list", "classes", g => g["name", "class"].SepBy(1, g["symbol", "comma"])
                 .Select(exprs => new NlListExpression(exprs)));
 
-            this.Add("root", "expr", g => g["expr"].Last().SepBy(1, g["symbol", "comma"])
-                .Select(exprs => new NlListExpression(exprs))); //TODO: もしかして最後だけが戻り値になる的な？
-
-            this.Add("method", "calling", g => g["list", "args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"])
-                .Select(o => o.Otherwise(() => new NlListExpression())));
+            this.Add("list", "expr", g => g["expr"].Last().SepBy(1, g["symbol", "comma"])
+                .Select(exprs => new NlListExpression(exprs)));
 
             this.Add("stmt", "method", g => Combinator.Choice(
-                g["root", "expr"].Left(g["root", "endline"]),
+                g["list", "expr"].Left(g["root", "endline"]),
                 g["def", "local_var"],
                 g["def", "instance_var"],
                 g["def", "class_var"],
@@ -263,11 +278,12 @@ namespace NNotepadLang
                 g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
-                g["root", "expr"].Between(g["keyword", "return"], g["root", "endline"]) //TODO
+                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]) //TODO
             ));
 
             this.Add("stmt", "class", g => Combinator.Choice(
                 g["def", "method"],
+                g["def", "para"],
                 g["def", "class_var"],
                 g["def", "instance_var"],
                 g["def", "global_var"],
@@ -277,12 +293,15 @@ namespace NNotepadLang
             this.Add("stmt", "module", g => Combinator.Choice(
                 g["def", "module"],
                 g["def", "class"],
+                g["def", "native_class"],
                 g["name", "class"].Between(g["keyword", "include"], g["root", "endline"]) //TODO
             ));
 
             this.Add("stmt", "global", g => Combinator.Choice(
                 g["def", "method"],
+                g["def", "para"],
                 g["def", "class"],
+                g["def", "native_class"],
                 g["def", "module"],
                 g["def", "global_var"],
                 g["block", "script"],
@@ -290,7 +309,7 @@ namespace NNotepadLang
             ));
 
             this.Add("stmt", "script", g => Combinator.Choice(
-                g["root", "expr"].Left(g["root", "endline"]),
+                g["list", "expr"].Left(g["root", "endline"]),
                 g["def", "local_var"],
                 g["def", "instance_var"],
                 g["def", "class_var"],
@@ -298,13 +317,11 @@ namespace NNotepadLang
                 g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
-                g["keyword", "continue"].Left(g["root", "endline"]),
-                g["keyword", "continue"].Left(g["root", "endline"]),
-                g["root", "expr"].Between(g["keyword", "return"], g["root", "endline"])
+                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"])
             ));
 
             this.Add("stmt", "block", g => Combinator.Choice(
-                g["root", "expr"].Left(g["root", "endline"]),
+                g["list", "expr"].Left(g["root", "endline"]),
                 g["def", "local_var"],
                 g["def", "instance_var"],
                 g["def", "class_var"],
@@ -313,8 +330,22 @@ namespace NNotepadLang
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
                 g["keyword", "continue"].Left(g["root", "endline"]),
-                g["keyword", "continue"].Left(g["root", "endline"]),
-                g["root", "expr"].Between(g["keyword", "return"], g["root", "endline"])
+                g["keyword", "break"].Left(g["root", "endline"]),
+                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]),
+                g["expr", "assign"].Between(g["keyword", "yield"], g["root", "endline"])
+            ));
+
+            this.Add("stmt", "para", g => Combinator.Choice(
+                g["list", "expr"].Left(g["root", "endline"]),
+                g["def", "local_var"],
+                g["def", "instance_var"],
+                g["def", "class_var"],
+                g["def", "global_var"],
+                g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
+                g["block", "while"], g["block", "unless"], g["block", "switch"],
+                g["line", "for"], g["line", "while"], g["line", "unless"],
+                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]),
+                g["expr", "assign"].Between(g["keyword", "yield"], g["root", "endline"])
             ));
 
             this.Add("root", "program", g =>
@@ -329,6 +360,13 @@ namespace NNotepadLang
                g["stmt", "method"].Many().Left(g["keyword", "fed"]).Left(g["root", "endline"].Maybe()),
                (access, @override, native, name, args, body) =>
                    new NlDefMethodExpression(access, @override, native, name, args, body)
+            ));
+
+            this.Add("def", "para", g => g["deco", "access"].Maybe().Pipe(
+                g["keyword", "para"].Right(g["term", "identifier"]),
+                g["list", "method_args"].Maybe().Between(g["root", "lparen"], g["root", "rparen"]).Maybe().Left(g["root", "newline"]),
+                g["stmt", "para"].Many().Left(g["keyword", "arap"]).Left(g["root", "endline"].Maybe()),
+                (access, name, args, body) => new NlDefParaExpression(access, name, args, body)
             ));
 
             this.Add("def", "class", g => g["deco", "access"].Maybe().Pipe(
@@ -348,25 +386,25 @@ namespace NNotepadLang
             ));
 
             this.Add("def", "local_var", g =>
-                g["root", "expr"].Between(g["keyword", "local"], g["root", "endline"])
+                g["list", "expr"].Between(g["keyword", "local"], g["root", "endline"])
                     .Select(NlDefVariableExpression.Local));
 
             this.Add("def", "instance_var", g =>
-                g["root", "expr"].Between(g["keyword", "instance"], g["root", "endline"])
+                g["list", "expr"].Between(g["keyword", "instance"], g["root", "endline"])
                     .Select(NlDefVariableExpression.Instance));
 
             this.Add("def", "class_var", g =>
-                g["root", "expr"].Between(g["keyword", "class"], g["root", "endline"])
+                g["list", "expr"].Between(g["keyword", "class"], g["root", "endline"])
                     .Select(NlDefVariableExpression.Class));
 
             this.Add("def", "global_var", g =>
-                g["root", "expr"].Between(g["keyword", "global"], g["root", "endline"])
+                g["list", "expr"].Between(g["keyword", "global"], g["root", "endline"])
                     .Select(NlDefVariableExpression.Global));
 
-            this.Add("block", "if", g => g["root", "expr"].Between(g["keyword", "if"], g["root", "newline"])
+            this.Add("block", "if", g => g["expr", "assign"].Between(g["keyword", "if"], g["root", "newline"])
                 .Pipe(
                     g["stmt", "block"].Many(),
-                    g["root", "expr"].Between(g["keyword", "elif"], g["root", "newline"])
+                    g["expr", "assign"].Between(g["keyword", "elif"], g["root", "newline"])
                         .Both(g["stmt", "block"].Many()).Many(),
                     Combinator.Sequence(g["keyword", "else"], g["root", "newline"])
                         .Right(g["stmt", "block"].Many()).Maybe(),
@@ -376,51 +414,51 @@ namespace NNotepadLang
                 .Left(g["keyword", "fi"]).Left(g["root", "endline"].Maybe())
             );
 
-            this.Add("line", "if", g => g["keyword", "if"].Right(g["root", "expr"]).Pipe(
-                g["root", "expr"].Between(g["root", "newline"], g["root", "endline"]),
+            this.Add("line", "if", g => g["keyword", "if"].Right(g["expr", "assign"]).Pipe(
+                g["list", "expr"].Between(g["root", "newline"], g["root", "endline"]),
                 (cond, trueExpr) => new NlIfExpression(cond, trueExpr)
             ));
 
             this.Add("block", "for", g => g["keyword", "for"].Right(g["term", "identifier"]).Pipe(
-                g["root", "expr"].Between(g["keyword", "in"], g["root", "newline"]),
+                g["expr", "assign"].Between(g["keyword", "in"], g["root", "newline"]),
                 g["stmt", "block"].Many().Left(g["keyword", "rof"]).Left(g["root", "endline"].Maybe()),
                 (identifier, source, exprs) => new NlForExpression(identifier, source, exprs)
             ));
 
-            this.Add("line", "for", g => g["keyword", "if"].Right(g["root", "expr"]).Pipe(
-                g["root", "expr"].Between(g["keyword", "in"], g["root", "newline"]),
-                g["root", "expr"].Left(g["root", "endline"]),
+            this.Add("line", "for", g => g["keyword", "for"].Right(g["term", "identifier"]).Pipe(
+                g["expr", "assign"].Between(g["keyword", "in"], g["root", "newline"]),
+                g["list", "expr"].Left(g["root", "endline"]),
                 (identifier, source, expr) => new NlForExpression(identifier, source, expr)
             ));
 
-            this.Add("block", "while", g => g["keyword", "while"].Right(g["root", "expr"]).Pipe(
+            this.Add("block", "while", g => g["keyword", "while"].Right(g["expr", "assign"]).Pipe(
                 g["stmt", "block"].Many().Between(g["root", "newline"], g["keyword", "elihw"]).Left(g["root", "endline"].Maybe()),
                 (cond, exprs) => new NlWhileExpression(cond, exprs)
             ));
 
-            this.Add("line", "while", g => g["keyword", "while"].Right(g["root", "expr"]).Pipe(
-                g["root", "expr"].Between(g["root", "newline"], g["root", "endline"]),
+            this.Add("line", "while", g => g["keyword", "while"].Right(g["expr", "assign"]).Pipe(
+                g["list", "expr"].Between(g["root", "newline"], g["root", "endline"]),
                 (cond, expr) => new NlWhileExpression(cond, expr)
             ));
 
-            this.Add("block", "unless", g => g["keyword", "unless"].Right(g["root", "expr"]).Pipe(
+            this.Add("block", "unless", g => g["keyword", "unless"].Right(g["expr", "assign"]).Pipe(
                 g["stmt", "block"].Many().Between(g["root", "newline"], g["keyword", "sselnu"]).Left(g["root", "endline"].Maybe()),
                 (cond, exprs) => new NlUnlessExpression(cond, exprs)
             ));
 
-            this.Add("line", "unless", g => g["keyword", "unless"].Right(g["root", "expr"]).Pipe(
-                g["root", "expr"].Between(g["root", "newline"], g["root", "endline"]),
+            this.Add("line", "unless", g => g["keyword", "unless"].Right(g["expr", "assign"]).Pipe(
+                g["list", "expr"].Between(g["root", "newline"], g["root", "endline"]),
                 (cond, expr) => new NlUnlessExpression(cond, expr)
             ));
 
-            this.Add("later", "if", g => g["root", "expr"].Pipe(
-                g["root", "expr"].Between(g["keyword", "if"], g["root", "endline"]),
+            this.Add("later", "if", g => g["list", "expr"].Pipe(
+                g["expr", "assign"].Between(g["keyword", "if"], g["root", "endline"]),
                 (desc, cond) => new NlIfExpression(cond, desc)
             ));
 
-            this.Add("block", "switch", g => g["root", "expr"].Maybe().Between(g["keyword", "switch"], g["root", "newline"])
+            this.Add("block", "switch", g => g["expr", "assign"].Maybe().Between(g["keyword", "switch"], g["root", "newline"])
                 .Pipe(
-                    g["keyword", "case"].Right(g["root", "expr"])
+                    g["keyword", "case"].Right(g["list", "expr"])
                         .Both(g["root", "newline"].Right(g["stmt", "block"].Many())).Many(),
                     Combinator.Sequence(g["keyword", "default"], g["root", "newline"])
                         .Right(g["stmt", "block"].Many()).Maybe(),
@@ -442,7 +480,7 @@ namespace NNotepadLang
                     g["keyword", "prop"].Right(g["term", "identifier"]),
                     g["deco", "access"].Between(g["root", "lparen"], g["symbol", "comma"])
                         .Both(g["deco", "access"].Left(g["root", "rparen"])).Maybe(),
-                    g["symbol", "assign"].Right(g["root", "expr"]).Maybe(),
+                    g["symbol", "assign"].Right(g["expr", "assign"]).Maybe(),
                     (access, name, t, value) => new NlDefPropertyExpression(access, name, t, value)
                 )
                 .Left(g["root", "endline"])
@@ -450,17 +488,17 @@ namespace NNotepadLang
 
             this.Add("value", "block", g => g["val", "line_if"].Or(g["val", "block_if"]));
 
-            this.Add("val", "line_if", g => g["root", "expr"].Pipe(
-                g["root", "expr"].Between(g["keyword", "else"], g["keyword", "in"]),
-                g["root", "expr"],
+            this.Add("val", "line_if", g => g["expr", "assign"].Pipe(
+                g["expr", "assign"].Between(g["keyword", "else"], g["keyword", "in"]),
+                g["expr", "assign"],
                 (trueExpr, falseExpr, cond) => new NlIfExpression(cond, trueExpr, falseExpr)
             ));
 
-            this.Add("val", "block_if", g => g["root", "expr"].Between(g["keyword", "if"], g["root", "newline"]).Pipe(
-                g["root", "expr"].Left(g["root", "endline"]),
-                g["root", "expr"].Between(g["keyword", "elif"], g["root", "newline"])
-                    .Both(g["root", "expr"]).Left(g["root", "endline"]).Many(),
-                g["root", "expr"].Between(
+            this.Add("val", "block_if", g => g["expr", "assign"].Between(g["keyword", "if"], g["root", "newline"]).Pipe(
+                g["expr", "assign"].Left(g["root", "endline"]),
+                g["expr", "assign"].Between(g["keyword", "elif"], g["root", "newline"])
+                    .Both(g["expr", "assign"]).Left(g["root", "endline"]).Many(),
+                g["expr", "assign"].Between(
                     Combinator.Sequence(g["keyword", "else"], g["root", "newline"]),
                     Combinator.Sequence(g["root", "endline"], g["keyword", "fi"])
                 ),
@@ -468,6 +506,18 @@ namespace NNotepadLang
             ));
 
             this.Add("line", "require", g => g["term", "string"].Between(g["keyword", "require"], g["root", "endline"])); //TODO: Select
+
+            this.Add("def", "native_method", g => g["keyword", "def"].Right(g["term", "identifier"]).Pipe(
+                g["keyword", "as"].Right(g["term", "string"]),
+                (name, alternative) => YacqExpression.Ignore() //TODO
+            ));
+
+            this.Add("def", "native_class", g => g["keyword", "native"].IgnoreSeq(g["keyword", "class"]).Right(g["term", "identifier"]).Pipe(
+                g["term", "string"].Between(g["keyword", "with"], g["root", "newline"]),
+                g["def", "native_method"].Left(g["root", "endline"]).Many()
+                    .Left(g["keyword", "ssalc"].IgnoreSeq(g["root", "endline"].Maybe())),
+                (name, libraryName, members) => YacqExpression.Ignore() //TODO                
+            ));
 
             this.Add("root", "ignore", g => g["root", "space?"]);
             this.Set.Default = g => g["root", "program"];

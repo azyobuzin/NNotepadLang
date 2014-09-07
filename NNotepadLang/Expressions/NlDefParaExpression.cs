@@ -5,13 +5,11 @@ using XSpect.Yacq.Expressions;
 
 namespace NNotepadLang.Expressions
 {
-    public class NlDefMethodExpression : NlEmptyExpression
+    public class NlDefParaExpression : NlEmptyExpression
     {
-        public NlDefMethodExpression(IOption<YacqExpression> access, IOption<YacqExpression> isOverride, IOption<YacqExpression> isNative, YacqExpression name, IOption<IOption<YacqExpression>> args, IEnumerable<YacqExpression> body)
+        public NlDefParaExpression(IOption<YacqExpression> access, YacqExpression name, IOption<IOption<YacqExpression>> args, IEnumerable<YacqExpression> body)
         {
             this.Access = access.Select(x => (x as NlAccessModifierExpression).Access).Otherwise(() => AccessModifier.Public);
-            this.IsOverride = isOverride.HasValue;
-            this.IsNative = isNative.HasValue;
             this.Name = (name as IdentifierExpression).Name;
             this.Args = args.HasValue && args.Value.HasValue
                 ? (args.Value.Value as NlListExpression).Expressions.Cast<IdentifierExpression>().Select(x => x.Name).ToArray()
@@ -20,8 +18,6 @@ namespace NNotepadLang.Expressions
         }
 
         public AccessModifier Access { get; private set; }
-        public bool IsOverride { get; private set; }
-        public bool IsNative { get; private set; }
         public string Name { get; private set; }
         public IReadOnlyList<string> Args { get; private set; }
         public IReadOnlyList<YacqExpression> Body { get; private set; }
