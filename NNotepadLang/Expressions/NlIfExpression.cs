@@ -55,25 +55,25 @@ namespace NNotepadLang.Expressions
             var trueExpr = this.True.Reduce(symbols);
             var elif = (this.Elif ?? Enumerable.Empty<Tuple<YacqExpression, NlBlockExpression>>())
                 .Select(t => Tuple.Create(
-                    t.Item1.Reduce(symbols),
+                    Expression.Convert(t.Item1.Reduce(symbols), typeof(bool)),
                     t.Item2.Reduce(symbols)
                 ))
                 .ToArray();
             Array.Reverse(elif);
             var falseExpr = this.False != null ? this.False.Reduce(symbols) : Expression.Empty();
 
-            if (trueExpr.Type != typeof(void) && falseExpr != null && falseExpr.Type != typeof(void) && elif.All(t => t.Item2.Type != typeof(void)))
+            if (trueExpr.Type != typeof(void) && falseExpr.Type != typeof(void) && elif.All(t => t.Item2.Type != typeof(void)))
             {
                 return elif.Aggregate(
                     falseExpr,
-                    (expr, t) => Expression.Condition(Expression.Convert(t.Item1, typeof(bool)), t.Item2, expr),
+                    (expr, t) => Expression.Condition(t.Item1, t.Item2, expr),
                     expr => Expression.Condition(cond, trueExpr, expr)
                 );
             }
 
             return elif.Aggregate(
                 falseExpr,
-                (expr, t) => Expression.IfThenElse(Expression.Convert(t.Item1, typeof(bool)), t.Item2, expr),
+                (expr, t) => Expression.IfThenElse(t.Item1, t.Item2, expr),
                 expr => Expression.IfThenElse(cond, trueExpr, expr)
             );
         }

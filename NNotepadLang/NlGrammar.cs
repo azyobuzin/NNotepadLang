@@ -274,7 +274,6 @@ namespace NNotepadLang
                 .Select(exprs => new NlListExpression(exprs)));
 
             this.Add("stmt", "method", g => Combinator.Choice(
-                g["list", "expr"].Left(g["root", "endline"]),
                 g["def", "local_var"],
                 g["def", "instance_var"],
                 g["def", "class_var"],
@@ -282,7 +281,8 @@ namespace NNotepadLang
                 g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
-                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]) //TODO
+                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]), //TODO
+                g["list", "expr"].Left(g["root", "endline"])
             ));
 
             this.Add("stmt", "class", g => Combinator.Choice(
@@ -313,21 +313,6 @@ namespace NNotepadLang
             ));
 
             this.Add("stmt", "script", g => Combinator.Choice(
-                g["list", "expr"].Left(g["root", "endline"]),
-                g["def", "local_var"],
-                g["def", "instance_var"],
-                g["def", "class_var"],
-                g["def", "global_var"],
-                g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
-                g["block", "while"], g["block", "unless"], g["block", "switch"],
-                g["line", "for"], g["line", "while"], g["line", "unless"],
-                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"])
-            ));
-
-            this.Add("stmt", "block", g => Combinator.Choice(
-                g["keyword", "continue"].Left(g["root", "endline"]).Select(_ => YacqExpression.Function("$continue")),
-                g["keyword", "break"].Left(g["root", "endline"]).Select(_ => YacqExpression.Function("$break")),
-                g["list", "expr"].Left(g["root", "endline"]),
                 g["def", "local_var"],
                 g["def", "instance_var"],
                 g["def", "class_var"],
@@ -336,7 +321,22 @@ namespace NNotepadLang
                 g["block", "while"], g["block", "unless"], g["block", "switch"],
                 g["line", "for"], g["line", "while"], g["line", "unless"],
                 g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]),
-                g["expr", "assign"].Between(g["keyword", "yield"], g["root", "endline"])
+                g["list", "expr"].Left(g["root", "endline"])
+            ));
+
+            this.Add("stmt", "block", g => Combinator.Choice(
+                g["def", "local_var"],
+                g["def", "instance_var"],
+                g["def", "class_var"],
+                g["def", "global_var"],
+                g["block", "if"], g["block", "for"], g["line", "if"], g["later", "if"],
+                g["block", "while"], g["block", "unless"], g["block", "switch"],
+                g["line", "for"], g["line", "while"], g["line", "unless"],
+                g["keyword", "continue"].Left(g["root", "endline"]).Select(_ => YacqExpression.Function("$continue")),
+                g["keyword", "break"].Left(g["root", "endline"]).Select(_ => YacqExpression.Function("$break")),
+                g["expr", "assign"].Between(g["keyword", "return"], g["root", "endline"]),
+                g["expr", "assign"].Between(g["keyword", "yield"], g["root", "endline"]),
+                g["list", "expr"].Left(g["root", "endline"])
             ));
 
             this.Add("stmt", "para", g => Combinator.Choice(

@@ -31,8 +31,8 @@ namespace NNotepadLang.Expressions
             var continueLabel = Expression.Label();
 
             var blockSymbols = new SymbolTable(symbols);
-            blockSymbols.Add(DispatchTypes.Method, "$break", (e, s, t) => Expression.Break(breakLabel));
-            blockSymbols.Add(DispatchTypes.Method, "$continue", (e, s, t) => Expression.Continue(continueLabel));
+            blockSymbols[DispatchTypes.Method, "$break"] = (e, s, t) => Expression.Break(breakLabel);
+            blockSymbols[DispatchTypes.Method, "$continue"] = (e, s, t) => Expression.Continue(continueLabel);
 
             return Expression.Loop(
                 Expression.Block(
